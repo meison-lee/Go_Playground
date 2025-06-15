@@ -1,0 +1,19 @@
+version: '3'
+services:
+  backend1:
+    build: ./backend
+    command: CompileDaemon --build="go build -o backend1 backend1.go" --command=./backend1
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8081:8081"
+    working_dir: /app
+
+  backend2:
+    build: ./backend
+    command: CompileDaemon --build="go build -o backend2 backend2.go" --command=./backend2
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8082:8082"
+    working_dir: /app
