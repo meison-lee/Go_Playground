@@ -13,10 +13,19 @@ import (
 	"time"
 )
 
+type Backend struct {
+	URL    string
+	Weight int64
+	Health bool
+}
+
 var routes = map[string]*RoutePool{
 	"/api/": {
-		Index:    0,
-		Backends: []string{"http://localhost:8081", "http://localhost:8082"},
+		Index: 0,
+		Backends: []Backend{
+			{URL: "http://localhost:8081", Weight: 1, Health: true},
+			{URL: "http://localhost:8082", Weight: 1, Health: true},
+		},
 	},
 	// "/static/": []string{"http://localhost:8082"},
 }
@@ -24,7 +33,7 @@ var routes = map[string]*RoutePool{
 type RoutePool struct {
 	Index    int64
 	mutex    sync.Mutex
-	Backends []string
+	Backends []Backend
 }
 
 type RequestsReponse struct {
@@ -80,6 +89,31 @@ func main() {
 		Handler:      mux,
 	}
 
+	for _, routePool := range routes {
+		go func(routePool *RoutePool) {
+			for {
+				routePool.mutex.Lock()
+				for i := range routePool.Backends {
+					backend := &routePool.Backends[i]
+					client := http.Client{
+						Timeout: 2 * time.Second,
+					}
+					resp, err := client.Get(backend.URL)
+					if err == nil && resp.StatusCode == 200 {
+						backend.Health = true
+					} else {
+						backend.Health = false
+					}
+					if resp != nil {
+						resp.Body.Close()
+					}
+				}
+				routePool.mutex.Unlock()
+				time.Sleep(5 * time.Second)
+			}
+		}(routePool)
+	}
+
 	fmt.Println("Proxy server started at :8080")
 	log.Fatal(server.ListenAndServe())
 }
@@ -105,20 +139,26 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	for prefix, routePool := range routes {
 		if len(r.URL.Path) >= len(prefix) && r.URL.Path[:len(prefix)] == prefix {
-
-			var selectedBackend string
+			var selectedBackend Backend
 
 			routePool.mutex.Lock()
-			selectedBackend = routePool.Backends[routePool.Index]
-			routePool.Index = (routePool.Index + 1) % int64(len(routePool.Backends))
+			maxAttempts := len(routePool.Backends)
+			for i := 0; i < maxAttempts; i++ {
+				selectedBackend = routePool.Backends[routePool.Index]
+				routePool.Index = (routePool.Index + 1) % int64(len(routePool.Backends))
+
+				if selectedBackend.Health {
+					break
+				}
+			}
 			routePool.mutex.Unlock()
 
 			countRequestMu.Lock()
 			countRequest[prefix]++
 			countRequestMu.Unlock()
 
-			request.Backend = selectedBackend
-			target, _ := url.Parse(selectedBackend)
+			request.Backend = selectedBackend.URL
+			target, _ := url.Parse(selectedBackend.URL)
 			proxy := httputil.NewSingleHostReverseProxy(target)
 
 			// Create a context with timeout
@@ -160,7 +200,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 			requestsMu.Lock()
 			requests[request.RequestID] = request
 			requestsMu.Unlock()
-			log.Printf("Proxy %s -> %s, cost %v\n", r.URL.Path, selectedBackend, time.Since(start))
+			log.Printf("Proxy %s -> %s, cost %v\n", r.URL.Path, selectedBackend.URL, time.Since(start))
 
 			return
 		}
