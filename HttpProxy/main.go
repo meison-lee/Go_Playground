@@ -8,38 +8,39 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/exp/maps"
 )
 
-type Backend struct {
-	URL    string
-	Weight int64
-	Health bool
+type ProxyConfig struct {
+	Routes []RouteConfig `json:"routes"`
 }
 
-var routes = map[string]*RoutePool{
-	"/api/": {
-		Index: 0,
-		Backends: []Backend{
-			{URL: "http://localhost:8081", Weight: 1, Health: true},
-			{URL: "http://localhost:8082", Weight: 1, Health: true},
-		},
-	},
-	// "/static/": []string{"http://localhost:8082"},
+type RouteConfig struct {
+	Prefix  string    `json:"prefix"`
+	Backend []Backend `json:"backends"`
+}
+
+type Backend struct {
+	URL    string `json:"url"`
+	Weight int64  `json:"weight"`
+	Health bool   `json:"health"`
+}
+type RequestsReponse struct {
+	TotalRequests int64          `json:"total_requests"`
+	TotalErrors   int64          `json:"total_errors"`
+	Requests      []ProxyRequest `json:"requests"`
 }
 
 type RoutePool struct {
 	Index    int64
 	mutex    sync.Mutex
 	Backends []Backend
-}
-
-type RequestsReponse struct {
-	TotalRequests int64          `json:"total_requests"`
-	TotalErrors   int64          `json:"total_errors"`
-	Requests      []ProxyRequest `json:"requests"`
 }
 
 type ProxyRequest struct {
@@ -53,6 +54,7 @@ type ProxyRequest struct {
 }
 
 var (
+	routes            map[string]*RoutePool
 	countRequest      map[string]int64
 	requests          map[string]ProxyRequest
 	statusCodeCount   map[int]int64
@@ -71,7 +73,34 @@ const (
 	proxyTimeout = 30 * time.Second
 )
 
+func LoadConfig(path string) (*ProxyConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var config ProxyConfig
+
+	err = json.Unmarshal(data, &config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	return &config, nil
+}
+
 func main() {
+	configPtr, err := LoadConfig("./config.json")
+	if err != nil {
+		log.Fatalf("Config load error: %v", err)
+	}
+
+	routes = make(map[string]*RoutePool)
+	for _, route := range configPtr.Routes {
+		routes[route.Prefix] = &RoutePool{
+			Backends: route.Backend,
+		}
+	}
 	countRequest = make(map[string]int64)
 	requests = make(map[string]ProxyRequest)
 	statusCodeCount = make(map[int]int64)
@@ -138,8 +167,10 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	requestsMu.Unlock()
 
 	for prefix, routePool := range routes {
-		if len(r.URL.Path) >= len(prefix) && r.URL.Path[:len(prefix)] == prefix {
+		if strings.HasPrefix(r.URL.Path, prefix) {
 			var selectedBackend Backend
+
+			healthBackendFound := false
 
 			routePool.mutex.Lock()
 			maxAttempts := len(routePool.Backends)
@@ -148,10 +179,16 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 				routePool.Index = (routePool.Index + 1) % int64(len(routePool.Backends))
 
 				if selectedBackend.Health {
+					healthBackendFound = true
 					break
 				}
 			}
 			routePool.mutex.Unlock()
+
+			if !healthBackendFound {
+				http.Error(w, "No healthy backend available", http.StatusBadGateway)
+				return
+			}
 
 			countRequestMu.Lock()
 			countRequest[prefix]++
@@ -215,9 +252,7 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	// Copy countRequest data
 	countRequestMu.Lock()
 	countRequestCopy := make(map[string]int64, len(countRequest))
-	for k, v := range countRequest {
-		countRequestCopy[k] = v
-	}
+	maps.Copy(countRequestCopy, countRequest)
 	countRequestMu.Unlock()
 
 	// Copy statusCodeCount data
@@ -234,6 +269,14 @@ func metricsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	for statusCode, count := range statusCodeCountCopy {
 		fmt.Fprintf(w, "proxy_status_code_total{code=\"%d\"} %d\n", statusCode, count)
+	}
+	for prefix, routePool := range routes {
+		routePool.mutex.Lock()
+		fmt.Fprintf(w, "\nPrefix:%s\n", prefix)
+		for _, backend := range routePool.Backends {
+			fmt.Fprintf(w, "backend_health{prefix=\"%s\",url=\"%s\"} %t\n", prefix, backend.URL, backend.Health)
+		}
+		routePool.mutex.Unlock()
 	}
 }
 

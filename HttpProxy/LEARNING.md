@@ -1,10 +1,39 @@
-To practice concurrency in Go, ChatGPT told me that I can try to build a Http Proxy Server, the proxy will handle the requests from client and distributes them to backend server, goroutine will handle each requests and I can learn about concurrency, lock and knowledge about Nginx.
+# HTTP Proxy Server Learning Project
 
+## Project Overview
+To practice concurrency in Go, I'm building an HTTP Proxy Server. The proxy will handle requests from clients and distribute them to backend servers. Using goroutines to handle each request, I'll learn about:
+- Concurrency
+- Locks
+- Nginx-like concepts
 
-Version 1 feature:
+## Version 1 Features
 
-1. Using docker-compose to build-up two backend server on :8081, :8082. With the CompileDaemon, I can rebuild the container as soon as I updated the code.
-2. The proxy can record the requests and errors, you can monitor them in /metrics or /requests
-3. Each prefix has its own routePool contain backends ready to serve the request, I also save an index to implement RoundRobin roughly(I haven't implement situation when the backend server is downed or auto-scaled...)
-4. It should use read, write mutex to improve the efficiency.
-5. It should read the config file from user, instead of hard-coding backends.
+### 1. Docker Setup
+- Using docker-compose to build two backend servers on ports 8081 and 8082
+- Implemented CompileDaemon for automatic container rebuilds on code updates
+
+### 2. Monitoring
+- Request and error recording capabilities
+- Monitoring endpoints:
+  - `/metrics`
+  - `/requests`
+
+### 3. Routing System
+- Each prefix has its own routePool containing backends
+- Implemented basic RoundRobin load balancing
+- **Limitations**:
+  - No handling for downed servers
+  - No auto-scaling support
+
+### 4. Performance
+- Implementation of read/write mutexes for improved efficiency
+
+### 5. Error Handling
+- Comprehensive error handling system
+
+### 6. Configuration
+- User-configurable backend settings via config file
+- No hard-coded backends
+
+### 7. Testing
+- Implementation of test suite
