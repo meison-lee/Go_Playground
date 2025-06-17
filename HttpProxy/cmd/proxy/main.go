@@ -2,11 +2,12 @@ package main
 
 import (
 	"Go_Playground/HttpProxy/internal/config"
-	"Go_Playground/HttpProxy/internal/constant"
+	constant "Go_Playground/HttpProxy/internal/constants"
 	"Go_Playground/HttpProxy/internal/handlers"
+	"Go_Playground/HttpProxy/internal/items"
 	"Go_Playground/HttpProxy/internal/loadbalancer"
+	"Go_Playground/HttpProxy/internal/model"
 	"Go_Playground/HttpProxy/internal/state"
-	"Go_Playground/HttpProxy/internal/types"
 	"fmt"
 	"log"
 	"net/http"
@@ -49,9 +50,9 @@ func main() {
 func initializeRoutes() {
 	for _, route := range config.Config.Routes {
 		// Convert config backends to types.Backend
-		backends := make([]types.Backend, len(route.Backend))
+		backends := make([]model.Backend, len(route.Backend))
 		for i, backend := range route.Backend {
-			backends[i] = types.Backend{
+			backends[i] = model.Backend{
 				URL:    backend.URL,
 				Weight: backend.Weight,
 				Health: true, // Initially assume healthy
@@ -61,34 +62,26 @@ func initializeRoutes() {
 		// Create load balancer for this route
 		lb := loadbalancer.NewRoundRobinLoadBalancer(backends)
 
-		state.Routes[route.Prefix] = &types.RoutePool{
-			Backends:     backends,
-			LoadBalancer: lb,
-		}
+		state.Routes[route.Prefix] = items.NewRoutePool(backends, lb)
 	}
 }
 
 func startHealthChecking() {
 	for _, routePool := range state.Routes {
-		go func(routePool *types.RoutePool) {
+		go func(routePool *items.RoutePool) {
 			for {
-				routePool.Mutex.Lock()
-				for i := range routePool.Backends {
-					backend := &routePool.Backends[i]
+				backends := routePool.GetBackends()
+				for i, backend := range backends {
 					client := http.Client{
 						Timeout: 2 * time.Second,
 					}
 					resp, err := client.Get(backend.URL)
-					if err == nil && resp.StatusCode == 200 {
-						backend.Health = true
-					} else {
-						backend.Health = false
-					}
+					health := err == nil && resp.StatusCode == 200
 					if resp != nil {
 						resp.Body.Close()
 					}
+					routePool.UpdateBackendHealth(i, health)
 				}
-				routePool.Mutex.Unlock()
 				time.Sleep(5 * time.Second)
 			}
 		}(routePool)

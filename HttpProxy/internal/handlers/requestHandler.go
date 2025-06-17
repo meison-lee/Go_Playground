@@ -1,8 +1,8 @@
 package handlers
 
 import (
+	"Go_Playground/HttpProxy/internal/model"
 	"Go_Playground/HttpProxy/internal/state"
-	"Go_Playground/HttpProxy/internal/types"
 	"encoding/json"
 	"net/http"
 )
@@ -10,7 +10,7 @@ import (
 func RequestsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	output := types.RequestsResponse{
+	output := model.RequestsResponse{
 		TotalRequests: state.LoadTotalRequests(),
 		TotalErrors:   state.LoadErrorCount(),
 		Requests:      state.GetAllRequests(),

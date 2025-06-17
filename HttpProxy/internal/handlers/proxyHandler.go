@@ -1,9 +1,9 @@
 package handlers
 
 import (
-	"Go_Playground/HttpProxy/internal/constant"
+	constant "Go_Playground/HttpProxy/internal/constants"
+	"Go_Playground/HttpProxy/internal/model"
 	"Go_Playground/HttpProxy/internal/state"
-	"Go_Playground/HttpProxy/internal/types"
 	"context"
 	"fmt"
 	"log"
@@ -24,7 +24,7 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	state.AddTotalRequests()
 
-	request := types.ProxyRequest{
+	request := model.ProxyRequest{
 		Path:      r.URL.Path,
 		StartTime: start,
 		RequestID: fmt.Sprintf("%d", state.LoadTotalRequests()),
@@ -34,9 +34,8 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	for prefix, routePool := range state.Routes {
 		if strings.HasPrefix(r.URL.Path, prefix) {
-			var selectedBackend types.Backend
 
-			selectedBackend, err := routePool.LoadBalancer.NextBackend()
+			selectedBackend, err := routePool.NextBackend()
 			if err != nil {
 				http.Error(w, "No healthy backend available", http.StatusBadGateway)
 				return

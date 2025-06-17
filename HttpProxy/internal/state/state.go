@@ -1,16 +1,17 @@
 package state
 
 import (
-	"Go_Playground/HttpProxy/internal/types"
+	"Go_Playground/HttpProxy/internal/items"
+	"Go_Playground/HttpProxy/internal/model"
 	"sync"
 	"sync/atomic"
 )
 
 // Global state variables
 var (
-	Routes            map[string]*types.RoutePool
+	Routes            map[string]*items.RoutePool
 	CountRequest      map[string]int64
-	Requests          map[string]types.ProxyRequest
+	Requests          map[string]model.ProxyRequest
 	StatusCodeCount   map[int]int64
 	CountRequestMu    sync.Mutex
 	RequestsMu        sync.Mutex
@@ -24,9 +25,9 @@ var (
 
 // Initialize initializes all global state
 func Initialize() {
-	Routes = make(map[string]*types.RoutePool)
+	Routes = make(map[string]*items.RoutePool)
 	CountRequest = make(map[string]int64)
-	Requests = make(map[string]types.ProxyRequest)
+	Requests = make(map[string]model.ProxyRequest)
 	StatusCodeCount = make(map[int]int64)
 }
 
@@ -47,17 +48,17 @@ func LoadErrorCount() int64 {
 	return atomic.LoadInt64(&ErrorCount)
 }
 
-func SetRequest(id string, req types.ProxyRequest) {
+func SetRequest(id string, req model.ProxyRequest) {
 	RequestsMu.Lock()
 	defer RequestsMu.Unlock()
 	Requests[id] = req
 }
 
-func GetAllRequests() []types.ProxyRequest {
+func GetAllRequests() []model.ProxyRequest {
 	RequestsMu.Lock()
 	defer RequestsMu.Unlock()
 
-	requestsCopy := make([]types.ProxyRequest, 0, len(Requests))
+	requestsCopy := make([]model.ProxyRequest, 0, len(Requests))
 	for _, req := range Requests {
 		requestsCopy = append(requestsCopy, req)
 	}

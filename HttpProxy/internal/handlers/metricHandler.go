@@ -26,11 +26,10 @@ func MetricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Backend health status
 	for prefix, routePool := range state.Routes {
-		routePool.Mutex.Lock()
+		backends := routePool.GetBackends()
 		fmt.Fprintf(w, "\nPrefix:%s\n", prefix)
-		for _, backend := range routePool.Backends {
+		for _, backend := range backends {
 			fmt.Fprintf(w, "backend_health{prefix=\"%s\",url=\"%s\"} %t\n", prefix, backend.URL, backend.Health)
 		}
-		routePool.Mutex.Unlock()
 	}
 }

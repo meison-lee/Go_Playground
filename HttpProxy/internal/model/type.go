@@ -1,7 +1,6 @@
-package types
+package model
 
 import (
-	"sync"
 	"time"
 )
 
@@ -9,19 +8,6 @@ type Backend struct {
 	URL    string `json:"url"`
 	Weight int64  `json:"weight"`
 	Health bool   `json:"health"`
-}
-
-// LoadBalancer interface to make it testable and extensible
-type LoadBalancer interface {
-	NextBackend() (Backend, error)
-	GetBackends() []Backend
-}
-
-type RoutePool struct {
-	Index        int64
-	Mutex        sync.Mutex
-	Backends     []Backend
-	LoadBalancer LoadBalancer
 }
 
 // Request and response types
