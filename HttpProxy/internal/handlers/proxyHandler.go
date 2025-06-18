@@ -81,61 +81,8 @@ func ProxyHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	request.StatusCode = http.StatusBadGateway
+	state.IncrementStatusCode(http.StatusBadGateway)
+	http.Error(w, "No matching prefix", http.StatusBadGateway)
+	state.SetRequest(request.RequestID, request)
 }
-
-// func metricsHandler(w http.ResponseWriter, r *http.Request) {
-// 	w.Header().Set("Content-Type", "text/plain")
-// 	fmt.Fprintf(w, "proxy_requests_total %d\n", atomic.LoadInt64(&totalRequests))
-// 	fmt.Fprintf(w, "proxy_errors_total %d\n", atomic.LoadInt64(&errorCount))
-
-// 	// Copy countRequest data
-// 	countRequestMu.Lock()
-// 	countRequestCopy := make(map[string]int64, len(countRequest))
-// 	maps.Copy(countRequestCopy, countRequest)
-// 	countRequestMu.Unlock()
-
-// 	// Copy statusCodeCount data
-// 	statusCodeCountMu.Lock()
-// 	statusCodeCountCopy := make(map[int]int64, len(statusCodeCount))
-// 	for k, v := range statusCodeCount {
-// 		statusCodeCountCopy[k] = v
-// 	}
-// 	statusCodeCountMu.Unlock()
-
-// 	// Process the copied data without holding locks
-// 	for prefix, count := range countRequestCopy {
-// 		fmt.Fprintf(w, "proxy_requests_%s %d\n", prefix[1:len(prefix)-1], count)
-// 	}
-// 	for statusCode, count := range statusCodeCountCopy {
-// 		fmt.Fprintf(w, "proxy_status_code_total{code=\"%d\"} %d\n", statusCode, count)
-// 	}
-// 	for prefix, routePool := range routes {
-// 		routePool.mutex.Lock()
-// 		fmt.Fprintf(w, "\nPrefix:%s\n", prefix)
-// 		for _, backend := range routePool.Backends {
-// 			fmt.Fprintf(w, "backend_health{prefix=\"%s\",url=\"%s\"} %t\n", prefix, backend.URL, backend.Health)
-// 		}
-// 		routePool.mutex.Unlock()
-// 	}
-// }
-
-// func requestsHandler(w http.ResponseWriter, r *http.Request) {
-// 	w.Header().Set("Content-Type", "application/json")
-
-// 	output := RequestsReponse{
-// 		TotalRequests: atomic.LoadInt64(&totalRequests),
-// 		TotalErrors:   atomic.LoadInt64(&errorCount),
-// 	}
-
-// 	// Copy requests data
-// 	requestsMu.Lock()
-// 	requestsCopy := make([]ProxyRequest, 0, len(requests))
-// 	for _, req := range requests {
-// 		requestsCopy = append(requestsCopy, req)
-// 	}
-// 	requestsMu.Unlock()
-
-// 	// Process the copied data without holding the lock
-// 	output.Requests = requestsCopy
-// 	json.NewEncoder(w).Encode(output)
-// }
